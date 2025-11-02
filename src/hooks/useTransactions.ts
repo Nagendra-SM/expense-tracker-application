@@ -1,12 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 
-export interface Transaction {
-  _id: string;
+export type UpdateTransactionData = {
   type: 'income' | 'expense';
   amount: number;
   description: string;
   category: string;
   date: string;
+};
+
+export interface Transaction extends UpdateTransactionData {
+  id: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+  // Aliases for compatibility
   createdAt?: string;
   updatedAt?: string;
 }
@@ -25,9 +32,20 @@ export const useTransactions = (filters?: TransactionFilters) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const getAuthToken = () => {
-    return localStorage.getItem('token');
-  };
+// Helper function to get cookie by name
+const getCookie = (name: string): string | null => {
+  if (typeof document === 'undefined') return null; // For SSR
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+  return null;
+};
+
+const getAuthToken = () => {
+  const token = getCookie('auth_token');
+  console.log("Token from cookie:", token ? token : 'Not found');
+  return token;
+};
 
   const fetchTransactions = useCallback(async () => {
     try {
@@ -43,6 +61,7 @@ export const useTransactions = (filters?: TransactionFilters) => {
       if (filters?.endDate) params.append('endDate', filters.endDate);
 
       const response = await fetch(`${API_BASE_URL}?${params.toString()}`, {
+        credentials: 'include', // Important for cookies
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -55,7 +74,24 @@ export const useTransactions = (filters?: TransactionFilters) => {
       }
 
       const data = await response.json();
-      setTransactions(Array.isArray(data) ? data : []);
+      // Map the backend response to our frontend Transaction interface
+      const mappedTransactions = Array.isArray(data) 
+        ? data.map(tx => ({
+            id: tx.id || tx._id,  // Handle both id and _id from backend
+            user_id: tx.user_id || '',  // Ensure user_id is set
+            type: tx.type,
+            amount: tx.amount,
+            description: tx.description,
+            category: tx.category,
+            date: tx.date,
+            created_at: tx.created_at || tx.createdAt,
+            updated_at: tx.updated_at || tx.updatedAt,
+            // Aliases for compatibility
+            createdAt: tx.created_at || tx.createdAt,
+            updatedAt: tx.updated_at || tx.updatedAt
+          }))
+        : [];
+      setTransactions(mappedTransactions);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch transactions');
     } finally {
@@ -67,12 +103,19 @@ export const useTransactions = (filters?: TransactionFilters) => {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  const addTransaction = async (transaction: Omit<Transaction, '_id' | 'createdAt' | 'updatedAt'>) => {
+  const addTransaction = async (transaction: Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'createdAt' | 'updatedAt'>) => {
     try {
       setLoading(true);
       const token = getAuthToken();
+      console.log('Auth token in addTransaction:', token);
+
+      if (!token) {
+        throw new Error('No authentication token found. Please log in again.');
+      }
+
       const response = await fetch(API_BASE_URL, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -80,28 +123,41 @@ export const useTransactions = (filters?: TransactionFilters) => {
         body: JSON.stringify(transaction),
       });
 
+      console.log('Response status:', response.status);
+      
       if (!response.ok) {
-        const errorData = await response.json();
+        let errorData;
+        try {
+          errorData = await response.json();
+          console.error('Error response:', errorData);
+        } catch (e) {
+          console.error('Failed to parse error response:', e);
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
         throw new Error(errorData.message || 'Failed to add transaction');
       }
 
-      const newTransaction = await response.json();
-      setTransactions(prev => [newTransaction, ...prev]);
-      return newTransaction;
+      const data = await response.json();
+      console.log('Transaction added successfully:', data);
+      setTransactions(prev => [data, ...prev]);
+      return data;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add transaction');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add transaction';
+      console.error('Error in addTransaction:', errorMessage, err);
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);
     }
   };
 
-  const updateTransaction = async (id: string, updates: Partial<Omit<Transaction, '_id' | 'createdAt' | 'updatedAt'>>) => {
+  const updateTransaction = async (id: string, updates: UpdateTransactionData) => {
     try {
       setLoading(true);
       const token = getAuthToken();
       const response = await fetch(`${API_BASE_URL}/${id}`, {
         method: 'PUT',
+        credentials: 'include', // Important for cookies
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -116,7 +172,7 @@ export const useTransactions = (filters?: TransactionFilters) => {
 
       const updatedTransaction = await response.json();
       setTransactions(prev => 
-        prev.map(tx => tx._id === id ? { ...tx, ...updatedTransaction } : tx)
+        prev.map(tx => tx.id === id ? { ...tx, ...updatedTransaction } : tx)
       );
       return updatedTransaction;
     } catch (err) {
@@ -129,14 +185,18 @@ export const useTransactions = (filters?: TransactionFilters) => {
 
   const deleteTransaction = async (id: string) => {
     try {
+      if (!id || id === 'undefined') {
+        throw new Error('Invalid transaction ID');
+      }
+      
       setLoading(true);
-      const token = getAuthToken();
       const response = await fetch(`${API_BASE_URL}/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`
         },
+        credentials: 'include'
       });
 
       if (!response.ok) {
@@ -144,8 +204,14 @@ export const useTransactions = (filters?: TransactionFilters) => {
         throw new Error(errorData.message || 'Failed to delete transaction');
       }
 
-      setTransactions(prev => prev.filter(tx => tx._id !== id));
+      // Remove the transaction from the local state
+      setTransactions(prevTransactions => 
+        prevTransactions.filter(transaction => transaction.id !== id)
+      );
+      
+      return await response.json();
     } catch (err) {
+      console.error('Error deleting transaction:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete transaction');
       throw err;
     } finally {

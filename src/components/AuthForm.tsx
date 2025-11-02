@@ -1,17 +1,20 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DollarSign } from 'lucide-react';
 
 interface AuthFormProps {
   onSignIn: (email: string, password: string) => Promise<void>;
   onSignUp: (email: string, password: string) => Promise<void>;
+  loading?: boolean;
 }
 
-export const AuthForm = ({ onSignIn, onSignUp }: AuthFormProps) => {
+export const AuthForm = ({ onSignIn, onSignUp, loading = false }: AuthFormProps) => {
+  const navigate = useNavigate();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,16 +31,18 @@ export const AuthForm = ({ onSignIn, onSignUp }: AuthFormProps) => {
     }
 
     try {
-      setLoading(true);
+      setIsSubmitting(true);
       if (isSignUp) {
         await onSignUp(email, password);
       } else {
         await onSignIn(email, password);
       }
+      // Navigation will be handled by the ProtectedRoute in App.tsx
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
+      throw err; // Re-throw to allow error handling in parent component
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -96,10 +101,10 @@ export const AuthForm = ({ onSignIn, onSignUp }: AuthFormProps) => {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || isSubmitting}
             className="py-3 w-full font-medium text-white bg-blue-600 rounded-lg transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
+            {isSubmitting ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
           </button>
         </form>
 

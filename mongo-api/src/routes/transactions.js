@@ -8,6 +8,11 @@ const auth = require('../middleware/auth');
 // @access  Private
 router.get('/', auth, async (req, res) => {
   try {
+    if (!req.user || !req.user._id) {
+      console.error('No user found in request');
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
     const { type, category, startDate, endDate } = req.query;
     const filter = { user: req.user._id };
 
@@ -19,11 +24,15 @@ router.get('/', auth, async (req, res) => {
       if (endDate) filter.date.$lte = new Date(endDate);
     }
 
+    console.log('Fetching transactions with filter:', filter); // Debug log
     const transactions = await Transaction.find(filter).sort({ date: -1 });
     res.json(transactions);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server Error' });
+    console.error('Error fetching transactions:', err);
+    res.status(500).json({ 
+      message: 'Error fetching transactions',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 });
 
@@ -32,7 +41,13 @@ router.get('/', auth, async (req, res) => {
 // @access  Private
 router.post('/', auth, async (req, res) => {
   try {
+    if (!req.user || !req.user._id) {
+      console.error('No user found in request');
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
     const { type, amount, description, category, date } = req.body;
+    console.log('Creating transaction for user:', req.user._id); // Debug log
 
     // Basic validation
     if (!type || !amount || !description || !category) {
@@ -40,15 +55,15 @@ router.post('/', auth, async (req, res) => {
     }
 
     const newTransaction = new Transaction({
-      ...req.body,
-      user: req.user._id,
       type,
       amount,
       description,
       category,
-      date: date || new Date()
+      date: date || new Date(),
+      user: req.user._id // Ensure user ID is set from the authenticated user
     });
 
+    console.log('Saving transaction:', newTransaction); // Debug log
     const savedTransaction = await newTransaction.save();
     res.status(201).json(savedTransaction);
   } catch (err) {
@@ -109,16 +124,51 @@ router.put('/:id', auth, async (req, res) => {
 // @access  Private
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const transaction = await Transaction.findOneAndDelete({ _id: req.params.id, user: req.user._id });
+    const { id } = req.params;
     
-    if (!transaction) {
-      return res.status(404).json({ message: 'Transaction not found' });
+    // Validate ID format
+    if (!id || id === 'undefined' || id === 'null') {
+      console.error('Invalid transaction ID format:', id);
+      return res.status(400).json({ message: 'Invalid transaction ID' });
     }
 
-    res.json({ message: 'Transaction removed' });
+    const transaction = await Transaction.findOneAndDelete({ 
+      _id: id, 
+      user: req.user._id 
+    });
+    
+    if (!transaction) {
+      console.error('Transaction not found or not authorized:', { id, user: req.user._id });
+      return res.status(404).json({ 
+        message: 'Transaction not found or you are not authorized to delete it' 
+      });
+    }
+
+    console.log('Transaction deleted successfully:', { id, user: req.user._id });
+    res.json({ 
+      success: true, 
+      message: 'Transaction removed successfully',
+      id: transaction._id 
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server Error' });
+    console.error('Error deleting transaction:', {
+      error: err.message,
+      stack: err.stack,
+      params: req.params,
+      user: req.user?._id
+    });
+    
+    if (err.name === 'CastError') {
+      return res.status(400).json({ 
+        message: 'Invalid transaction ID format',
+        details: 'The provided ID is not in the correct format'
+      });
+    }
+    
+    res.status(500).json({ 
+      message: 'Failed to delete transaction',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 });
 

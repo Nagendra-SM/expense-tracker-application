@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Pencil, Trash2, Calendar, Tag } from 'lucide-react';
-import type { Transaction } from '../lib/database.types';
+import type { Transaction, UpdateTransactionData } from '../hooks/useTransactions';
 import { EditTransactionModal } from './EditTransactionModal';
 
 interface TransactionListProps {
   transactions: Transaction[];
+  loading?: boolean;
   onDelete: (id: string) => Promise<void>;
-  onUpdate: (id: string, updates: Partial<Transaction>) => Promise<void>;
+  onUpdate: (id: string, updates: UpdateTransactionData) => Promise<void>;
 }
 
 export const TransactionList = ({ transactions, onDelete, onUpdate }: TransactionListProps) => {
@@ -14,6 +15,12 @@ export const TransactionList = ({ transactions, onDelete, onUpdate }: Transactio
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
+    if (!id) {
+      console.error('Cannot delete: Transaction ID is missing');
+      alert('Cannot delete transaction: Invalid transaction ID');
+      return;
+    }
+
     if (!window.confirm('Are you sure you want to delete this transaction?')) {
       return;
     }
@@ -22,7 +29,9 @@ export const TransactionList = ({ transactions, onDelete, onUpdate }: Transactio
       setDeletingId(id);
       await onDelete(id);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to delete transaction');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete transaction';
+      console.error('Error deleting transaction:', error);
+      alert(errorMessage);
     } finally {
       setDeletingId(null);
     }
@@ -122,10 +131,17 @@ export const TransactionList = ({ transactions, onDelete, onUpdate }: Transactio
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(transaction.id)}
-                        disabled={deletingId === transaction.id}
+                        onClick={() => {
+                          if (!transaction.id) {
+                            console.error('Transaction ID is missing:', transaction);
+                            alert('Cannot delete: Transaction ID is missing');
+                            return;
+                          }
+                          handleDelete(transaction.id);
+                        }}
+                        disabled={deletingId === transaction.id || !transaction.id}
                         className="p-1 text-red-600 transition-colors hover:text-red-900 disabled:opacity-50"
-                        title="Delete"
+                        title={!transaction.id ? 'Cannot delete: Invalid transaction' : 'Delete'}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
