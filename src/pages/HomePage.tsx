@@ -85,17 +85,17 @@ export function HomePage() {
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="px-4 py-4 mx-auto max-w-7xl sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
+            <div className="flex gap-3 items-center">
               <div className="p-2 bg-blue-600 rounded-lg">
                 <Wallet className="w-6 h-6 text-white" />
               </div>
               <h1 className="text-2xl font-bold text-gray-900">Expense Tracker</h1>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex gap-2 items-center">
               <div className="text-sm font-medium text-gray-700">{user?.email}</div>
               <button
                 onClick={handleSignOut}
-                className="flex items-center gap-2 px-4 py-2 text-gray-700 transition-colors hover:text-gray-900"
+                className="flex gap-2 items-center px-4 py-2 text-gray-700 transition-colors hover:text-gray-900"
               >
                 <span className="text-sm font-medium">Sign Out</span>
               </button>
@@ -130,7 +130,7 @@ export function HomePage() {
         <div className="mb-6">
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-6 py-3 font-medium text-white bg-blue-600 rounded-lg shadow-sm transition-colors hover:bg-blue-700"
+            className="flex gap-2 items-center px-6 py-3 font-medium text-white bg-blue-600 rounded-lg shadow-sm transition-colors hover:bg-blue-700"
           >
             <Plus className="w-5 h-5" />
             Add Transaction
